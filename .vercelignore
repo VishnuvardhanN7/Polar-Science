@@ -1,0 +1,7 @@
+datasets/
+backend/
+api/
+scripts/
+.venv/
+*.log
+SCIENTIFIC_ML_PLAN.md

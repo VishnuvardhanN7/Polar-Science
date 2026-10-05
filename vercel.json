@@ -1,64 +1,8 @@
 {
-    "rewrites": [
-        {
-            "source": "/explore",
-            "destination": "/index.html"
-        },
-        {
-            "source": "/explore/:path*",
-            "destination": "/index.html"
-        },
-        {
-            "source": "/expeditions",
-            "destination": "/index.html"
-        },
-        {
-            "source": "/expeditions/:path*",
-            "destination": "/index.html"
-        },
-        {
-            "source": "/knowledge",
-            "destination": "/index.html"
-        },
-        {
-            "source": "/knowledge/:path*",
-            "destination": "/index.html"
-        },
-        {
-            "source": "/media",
-            "destination": "/index.html"
-        },
-        {
-            "source": "/stories",
-            "destination": "/index.html"
-        },
-        {
-            "source": "/stories/:path*",
-            "destination": "/index.html"
-        },
-        {
-            "source": "/ai",
-            "destination": "/index.html"
-        },
-        {
-            "source": "/studio",
-            "destination": "/index.html"
-        },
-        {
-            "source": "/data",
-            "destination": "/index.html"
-        },
-        {
-            "source": "/data/:path*",
-            "destination": "/index.html"
-        },
-        {
-            "source": "/admin",
-            "destination": "/index.html"
-        },
-        {
-            "source": "/admin/:path*",
-            "destination": "/index.html"
-        }
-    ]
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
 }

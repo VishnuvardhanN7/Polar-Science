@@ -18,12 +18,6 @@ type ContentType =
   | 'Short Video Script'
   | 'Outreach Article';
 
-type Audience =
-  | 'public'
-  | 'student'
-  | 'researcher'
-  | 'educator';
-
 const TYPES: ContentType[] = [
   'Website Article',
   'Instagram Caption',
@@ -33,104 +27,72 @@ const TYPES: ContentType[] = [
   'Outreach Article',
 ];
 
-const AUDIENCES: {
-  value: Audience;
-  label: string;
-}[] = [
-    {
-      value: 'public',
-      label: 'General Public',
-    },
-    {
-      value: 'student',
-      label: 'Students',
-    },
-    {
-      value: 'researcher',
-      label: 'Researchers',
-    },
-    {
-      value: 'educator',
-      label: 'Educators',
-    },
-  ];
-
-function getPlatform(
-  type: ContentType,
-): string {
+/*
+ * Convert the UI content type into the exact
+ * platform name expected by the POLAR backend.
+ */
+function getPlatform(type: ContentType): string {
   switch (type) {
+    case 'Website Article':
+      return 'Website Article';
+
     case 'Instagram Caption':
-      return 'instagram';
+      return 'Instagram Caption';
 
     case 'Social Media Post':
-      return 'linkedin';
+      return 'Social Media Post';
 
     case 'YouTube Description':
-      return 'youtube';
+      return 'YouTube Description';
 
     case 'Short Video Script':
-      return 'instagram';
-
-    case 'Website Article':
-      return 'website';
+      return 'Short Video Script';
 
     case 'Outreach Article':
-      return 'website';
+      return 'Outreach Article';
 
     default:
-      return 'website';
+      return 'Website Article';
   }
 }
 
 export default function ContentStudio() {
-  const { data: docs = [] } =
-    useDocuments();
+  const { data: docs = [] } = useDocuments();
 
-  const [docId, setDocId] =
-    useState('');
+  const [docId, setDocId] = useState('');
 
   const [type, setType] =
-    useState<ContentType>(
-      'Website Article',
-    );
+    useState<ContentType>('Website Article');
 
-  const [audience, setAudience] =
-    useState<Audience>('public');
+  const [prompt, setPrompt] = useState('');
 
-  const [prompt, setPrompt] =
-    useState('');
+  const [output, setOutput] = useState('');
 
-  const [output, setOutput] =
-    useState('');
+  const [busy, setBusy] = useState(false);
 
-  const [citations, setCitations] =
-    useState<
-      Array<{
-        title: string;
-        source: string;
-        route: string;
-        score?: number;
-      }>
-    >([]);
+  const [copied, setCopied] = useState(false);
 
-  const [busy, setBusy] =
-    useState(false);
+  const [error, setError] = useState('');
 
-  const [copied, setCopied] =
-    useState(false);
-
-  const [error, setError] =
-    useState('');
-
+  /*
+   * Find the selected document from the
+   * POLAR knowledge repository.
+   */
   const selected =
-    docs.find(
-      (d) => d.id === docId,
-    ) || null;
+    docs.find((d) => d.id === docId) || null;
 
+  /*
+   * Generation is allowed when either:
+   * - a repository document is selected
+   * - or the user entered a topic
+   */
   const canGenerate =
-    selected ||
+    Boolean(selected) ||
     prompt.trim().length > 0;
 
+  /*
+   * Generate content using the FastAPI backend.
+   */
   async function handleGenerate() {
     if (!canGenerate || busy) {
       return;
@@ -143,10 +105,10 @@ export default function ContentStudio() {
     try {
       /*
        * If a repository document is selected,
-       * use its title as the primary POLAR
-       * knowledge query.
+       * use its title as the primary knowledge-base query.
        *
-       * Otherwise use the user's topic.
+       * If the user also entered additional context,
+       * append it to the query.
        */
       const query = selected
         ? `${selected.title}${prompt.trim()
@@ -155,27 +117,28 @@ export default function ContentStudio() {
         }`
         : prompt.trim();
 
-      const platform =
-        getPlatform(type);
+      /*
+       * Get the exact platform name expected
+       * by the POLAR backend.
+       */
+      const platform = getPlatform(type);
 
-      const result =
-        await generatePolarContent(
-          query,
-          audience,
-          platform,
-        );
-
-      setOutput(
-        result.content || '',
+      /*
+       * Call:
+       * POST /api/generate-content
+       */
+      const result = await generatePolarContent(
+        query,
+        platform,
       );
 
-      setCitations(
-        Array.isArray(
-          result.citations,
-        )
-          ? result.citations
-          : [],
-      );
+      /*
+       * Display only the generated content.
+       *
+       * Citations returned by the backend are intentionally
+       * not displayed in this page.
+       */
+      setOutput(result.content || '');
     } catch (err) {
       console.error(
         'POLAR content generation failed:',
@@ -189,21 +152,21 @@ export default function ContentStudio() {
       );
 
       setOutput('');
-      setCitations([]);
     } finally {
       setBusy(false);
     }
   }
 
+  /*
+   * Copy generated content.
+   */
   async function handleCopy() {
     if (!output) {
       return;
     }
 
     try {
-      await navigator.clipboard.writeText(
-        output,
-      );
+      await navigator.clipboard.writeText(output);
 
       setCopied(true);
 
@@ -281,8 +244,7 @@ export default function ContentStudio() {
                 value={type}
                 onChange={(e) =>
                   setType(
-                    e.target
-                      .value as ContentType,
+                    e.target.value as ContentType,
                   )
                 }
                 className="w-full bg-[#080B0F] border border-white/15 text-[#F4F5F2] text-sm p-3 focus:outline-none focus:border-[#8FD8E8]"
@@ -298,39 +260,12 @@ export default function ContentStudio() {
               </select>
             </Field>
 
-            {/* AUDIENCE */}
-            <Field label="TARGET AUDIENCE">
-              <select
-                value={audience}
-                onChange={(e) =>
-                  setAudience(
-                    e.target
-                      .value as Audience,
-                  )
-                }
-                className="w-full bg-[#080B0F] border border-white/15 text-[#F4F5F2] text-sm p-3 focus:outline-none focus:border-[#8FD8E8]"
-              >
-                {AUDIENCES.map(
-                  (item) => (
-                    <option
-                      key={item.value}
-                      value={item.value}
-                    >
-                      {item.label}
-                    </option>
-                  ),
-                )}
-              </select>
-            </Field>
-
-            {/* PROMPT */}
+            {/* DIRECTION / TOPIC */}
             <Field label="DIRECTION / TOPIC CONTEXT">
               <textarea
                 value={prompt}
                 onChange={(e) =>
-                  setPrompt(
-                    e.target.value,
-                  )
+                  setPrompt(e.target.value)
                 }
                 placeholder="Enter a topic, key facts, or what you want to emphasize..."
                 className="w-full bg-[#080B0F] border border-white/15 text-[#F4F5F2] text-sm p-3 min-h-28 resize-y focus:outline-none focus:border-[#8FD8E8]"
@@ -339,9 +274,7 @@ export default function ContentStudio() {
 
             {/* GENERATE BUTTON */}
             <button
-              onClick={
-                handleGenerate
-              }
+              onClick={handleGenerate}
               disabled={
                 busy || !canGenerate
               }
@@ -358,16 +291,12 @@ export default function ContentStudio() {
               ) : output ? (
                 <>
                   REGENERATE
-                  <RefreshCw
-                    size={15}
-                  />
+                  <RefreshCw size={15} />
                 </>
               ) : (
                 <>
                   GENERATE CONTENT
-                  <Sparkles
-                    size={15}
-                  />
+                  <Sparkles size={15} />
                 </>
               )}
             </button>
@@ -395,9 +324,7 @@ export default function ContentStudio() {
 
                 {output && (
                   <button
-                    onClick={
-                      handleCopy
-                    }
+                    onClick={handleCopy}
                     className="font-mono text-xs tracking-widest text-[#9BA6B2] hover:text-[#8FD8E8] transition-colors inline-flex items-center gap-2"
                   >
                     {copied ? (
@@ -411,9 +338,7 @@ export default function ContentStudio() {
                     ) : (
                       <>
                         COPY CONTENT
-                        <Copy
-                          size={14}
-                        />
+                        <Copy size={14} />
                       </>
                     )}
                   </button>
@@ -428,61 +353,6 @@ export default function ContentStudio() {
                     {output}
                   </div>
 
-                  {/* CITATIONS */}
-                  {citations.length >
-                    0 && (
-                      <div className="pt-6 border-t border-white/10">
-
-                        <p className="font-mono text-[10px] tracking-widest text-[#8FD8E8] mb-4">
-                          VERIFIED POLAR SOURCES
-                        </p>
-
-                        <div className="space-y-3">
-                          {citations.map(
-                            (
-                              citation,
-                              index,
-                            ) => (
-                              <a
-                                key={`${citation.title}-${index}`}
-                                href={
-                                  citation.route
-                                }
-                                className="block border border-white/10 p-4 hover:border-[#8FD8E8]/50 transition-colors"
-                              >
-                                <div className="flex items-center justify-between gap-4">
-
-                                  <div>
-                                    <p className="text-sm text-[#F4F5F2]">
-                                      {
-                                        citation.title
-                                      }
-                                    </p>
-
-                                    <p className="text-[10px] font-mono text-[#9BA6B2] mt-1 uppercase">
-                                      {
-                                        citation.source
-                                      }
-                                    </p>
-                                  </div>
-
-                                  {typeof citation.score ===
-                                    'number' && (
-                                      <span className="text-[10px] font-mono text-[#8FD8E8]">
-                                        {Math.round(
-                                          citation.score *
-                                          100,
-                                        )}
-                                        %
-                                      </span>
-                                    )}
-                                </div>
-                              </a>
-                            ),
-                          )}
-                        </div>
-                      </div>
-                    )}
                 </div>
               ) : (
                 <div className="h-[360px] flex flex-col items-center justify-center text-center text-[#9BA6B2] text-sm gap-3">
@@ -509,9 +379,7 @@ export default function ContentStudio() {
             {output && (
               <div className="pt-6 border-t border-white/10 mt-8 flex justify-end">
                 <button
-                  onClick={
-                    handleCopy
-                  }
+                  onClick={handleCopy}
                   className="px-6 py-3 border border-[#8FD8E8] text-[#8FD8E8] font-mono text-xs tracking-widest hover:bg-[#8FD8E8] hover:text-[#080B0F] transition-all"
                 >
                   {copied
@@ -526,6 +394,10 @@ export default function ContentStudio() {
     </main>
   );
 }
+
+/* =========================================================
+   FIELD COMPONENT
+   ========================================================= */
 
 function Field({
   label,

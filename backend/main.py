@@ -3,7 +3,6 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
-
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -29,7 +28,7 @@ app = FastAPI(
         "Semantic RAG + Temperature ML + Outreach Content API "
         "for the POLAR Science Portal"
     ),
-    version="2.4.0",
+    version="4.0.0",
 )
 
 app.add_middleware(
@@ -103,7 +102,6 @@ def first_non_empty(
     metadata: Dict[str, Any],
     *keys: str,
 ) -> str:
-
     for key in keys:
         value = clean_text(metadata.get(key))
 
@@ -111,6 +109,66 @@ def first_non_empty(
             return value
 
     return ""
+
+
+# ============================================================
+# PROFESSIONAL CONTENT CLEANER
+# ============================================================
+
+def clean_professional_content(text: str) -> str:
+    """
+    Final safety layer for generated outreach content.
+
+    Removes:
+    - emojis
+    - hashtags
+    - decorative symbols
+
+    Keeps normal scientific punctuation and formatting.
+    """
+
+    if not text:
+        return ""
+
+    # Remove emoji and pictographic Unicode ranges.
+    text = re.sub(
+        r"[\U0001F300-\U0001FAFF"
+        r"\U00002700-\U000027BF"
+        r"\U00002600-\U000026FF"
+        r"\U00002300-\U000023FF]",
+        "",
+        text,
+    )
+
+    # Remove hashtag words.
+    text = re.sub(
+        r"(?<!\w)#[A-Za-z0-9_]+",
+        "",
+        text,
+    )
+
+    # Remove decorative bullet characters.
+    text = re.sub(
+        r"[•●○▪◦◆◇★☆✓✔️]",
+        "",
+        text,
+    )
+
+    # Remove repeated spaces.
+    text = re.sub(
+        r"[ \t]+",
+        " ",
+        text,
+    )
+
+    # Clean excessive blank lines.
+    text = re.sub(
+        r"\n{3,}",
+        "\n\n",
+        text,
+    )
+
+    return text.strip()
 
 
 # ============================================================
@@ -193,18 +251,6 @@ def normalize_metadata(
         normalized.get("research_focus")
     )
 
-    normalized["overview"] = clean_text(
-        normalized.get("overview")
-    )
-
-    normalized["coordinates"] = clean_text(
-        normalized.get("coordinates")
-    )
-
-    normalized["established_year"] = clean_text(
-        normalized.get("established_year")
-    )
-
     normalized["research_areas"] = split_values(
         normalized.get("research_areas")
     )
@@ -215,6 +261,18 @@ def normalize_metadata(
 
     normalized["scientists"] = split_values(
         normalized.get("scientists")
+    )
+
+    normalized["overview"] = clean_text(
+        normalized.get("overview")
+    )
+
+    normalized["coordinates"] = clean_text(
+        normalized.get("coordinates")
+    )
+
+    normalized["established_year"] = clean_text(
+        normalized.get("established_year")
     )
 
     normalized["objectives"] = clean_text(
@@ -269,7 +327,6 @@ def normalize_results(
     normalized = []
 
     for result in results:
-
         if not isinstance(result, dict):
             continue
 
@@ -295,7 +352,7 @@ def get_source_type(
 
     metadata = result.get(
         "metadata",
-        {}
+        {},
     )
 
     source = clean_text(
@@ -305,24 +362,19 @@ def get_source_type(
     aliases = {
         "station": "stations",
         "stations": "stations",
-
         "expedition": "expeditions",
         "expeditions": "expeditions",
-
         "document": "documents",
         "documents": "documents",
-
         "media": "media",
-
         "story": "stories",
         "stories": "stories",
-
         "ai_content": "ai_content",
     }
 
     return aliases.get(
         source,
-        source
+        source,
     )
 
 
@@ -507,7 +559,11 @@ def extract_temperature_station(
         q,
     )
 
-    return match.group(1) if match else None
+    return (
+        match.group(1)
+        if match
+        else None
+    )
 
 
 def extract_number(
@@ -529,6 +585,7 @@ def extract_number(
                 return float(
                     match.group(1)
                 )
+
             except ValueError:
                 return None
 
@@ -539,7 +596,9 @@ def parse_temperature_prediction(
     query: str
 ) -> Dict[str, Any]:
 
-    station = extract_temperature_station(query)
+    station = extract_temperature_station(
+        query
+    )
 
     ap = extract_number(
         query,
@@ -572,12 +631,17 @@ def parse_temperature_prediction(
     date_time: Optional[datetime] = None
 
     date_time_match = re.search(
-        r"((?:\d{4}-\d{1,2}-\d{1,2}|"
+        r"((?:"
+        r"\d{4}-\d{1,2}-\d{1,2}|"
         r"\d{1,2}\s+(?:january|february|march|april|may|june|july|"
-        r"august|september|october|november|december)\s+\d{4})"
-        r"(?:[t\s]+)(?:at\s+)?"
-        r"(?:\d{1,2}:\d{2}(?:\s*(?:am|pm))?|"
-        r"\d{1,2}\s*(?:am|pm)))",
+        r"august|september|october|november|december)\s+\d{4}"
+        r")"
+        r"(?:[t\s]+)"
+        r"(?:at\s+)?"
+        r"(?:"
+        r"\d{1,2}:\d{2}(?:\s*(?:am|pm))?|"
+        r"\d{1,2}\s*(?:am|pm)"
+        r"))",
         query,
         re.IGNORECASE,
     )
@@ -587,6 +651,7 @@ def parse_temperature_prediction(
         date_text = date_time_match.group(1)
 
         try:
+
             date_time = (
                 pd.to_datetime(
                     date_text,
@@ -595,6 +660,7 @@ def parse_temperature_prediction(
             )
 
         except (TypeError, ValueError):
+
             date_time = None
 
     return {
@@ -611,7 +677,9 @@ def generate_temperature_answer(
     query: str
 ) -> Dict[str, Any]:
 
-    parsed = parse_temperature_prediction(query)
+    parsed = parse_temperature_prediction(
+        query
+    )
 
     station = parsed["station"]
     date_time = parsed["date_time"]
@@ -649,7 +717,9 @@ def generate_temperature_answer(
 
     if missing:
 
-        missing_text = join_naturally(missing)
+        missing_text = join_naturally(
+            missing
+        )
 
         return {
             "answer": (
@@ -693,7 +763,9 @@ def generate_temperature_answer(
 
         raise
 
-    station_name = station_display_name(station)
+    station_name = station_display_name(
+        station
+    )
 
     formatted_date = date_time.strftime(
         "%d %B %Y"
@@ -746,7 +818,7 @@ def find_best_expedition(
 
         metadata = result.get(
             "metadata",
-            {}
+            {},
         )
 
         title = first_non_empty(
@@ -803,13 +875,15 @@ def format_station_answer(
 
     research_focus = metadata.get(
         "research_focus",
-        []
+        [],
     )
 
     sections = []
 
     if name:
-        sections.append(f"### {name}")
+        sections.append(
+            f"### {name}"
+        )
 
     if location:
         sections.append(
@@ -824,7 +898,9 @@ def format_station_answer(
     if research_focus:
         sections.append(
             "**Research Focus:** "
-            + join_naturally(research_focus)
+            + join_naturally(
+                research_focus
+            )
         )
 
     if overview:
@@ -836,13 +912,17 @@ def format_station_answer(
 
         content = result.get(
             "content",
-            ""
+            "",
         )
 
         if content:
-            sections.append(content)
+            sections.append(
+                content
+            )
 
-    return "\n\n".join(sections)
+    return "\n\n".join(
+        sections
+    )
 
 
 # ============================================================
@@ -863,42 +943,42 @@ def format_expedition_answer(
 
     year = metadata.get(
         "year",
-        ""
+        "",
     )
 
     region = metadata.get(
         "region",
-        ""
+        "",
     )
 
     station_name = metadata.get(
         "station_name",
-        ""
+        "",
     )
 
     objectives = metadata.get(
         "objectives",
-        ""
+        "",
     )
 
     description = metadata.get(
         "description",
-        ""
+        "",
     )
 
     research_areas = metadata.get(
         "research_areas",
-        []
+        [],
     )
 
     institutions = metadata.get(
         "institutions",
-        []
+        [],
     )
 
     scientists = metadata.get(
         "scientists",
-        []
+        [],
     )
 
     sections = []
@@ -937,32 +1017,42 @@ def format_expedition_answer(
     if research_areas:
         sections.append(
             "**Research Areas:** "
-            + join_naturally(research_areas)
+            + join_naturally(
+                research_areas
+            )
         )
 
     if institutions:
         sections.append(
             "**Institutions:** "
-            + join_naturally(institutions)
+            + join_naturally(
+                institutions
+            )
         )
 
     if scientists:
         sections.append(
             "**Scientists:** "
-            + join_naturally(scientists)
+            + join_naturally(
+                scientists
+            )
         )
 
     if not sections:
 
         content = result.get(
             "content",
-            ""
+            "",
         )
 
         if content:
-            sections.append(content)
+            sections.append(
+                content
+            )
 
-    return "\n\n".join(sections)
+    return "\n\n".join(
+        sections
+    )
 
 
 # ============================================================
@@ -983,17 +1073,17 @@ def format_document_answer(
 
     year = metadata.get(
         "year",
-        ""
+        "",
     )
 
     region = metadata.get(
         "region",
-        ""
+        "",
     )
 
     description = metadata.get(
         "description",
-        ""
+        "",
     )
 
     document_type = first_non_empty(
@@ -1012,12 +1102,12 @@ def format_document_answer(
 
     abstract = metadata.get(
         "abstract",
-        ""
+        "",
     )
 
     content = result.get(
         "content",
-        ""
+        "",
     )
 
     sections = []
@@ -1063,7 +1153,9 @@ def format_document_answer(
             f"**About:** {content}"
         )
 
-    return "\n\n".join(sections)
+    return "\n\n".join(
+        sections
+    )
 
 
 # ============================================================
@@ -1074,7 +1166,9 @@ def format_primary_answer(
     result: Dict[str, Any]
 ) -> str:
 
-    source_type = get_source_type(result)
+    source_type = get_source_type(
+        result
+    )
 
     if source_type == "stations":
         return format_station_answer(result)
@@ -1087,7 +1181,7 @@ def format_primary_answer(
 
     content = result.get(
         "content",
-        ""
+        "",
     )
 
     if content:
@@ -1095,7 +1189,7 @@ def format_primary_answer(
 
     metadata = result.get(
         "metadata",
-        {}
+        {},
     )
 
     title = first_non_empty(
@@ -1111,7 +1205,7 @@ def format_primary_answer(
 
 
 # ============================================================
-# STATION → EXPEDITION RELATIONSHIP
+# STATION TO EXPEDITION RELATIONSHIP
 # ============================================================
 
 def generate_station_relationship_answer(
@@ -1120,7 +1214,7 @@ def generate_station_relationship_answer(
 
     metadata = station_result.get(
         "metadata",
-        {}
+        {},
     )
 
     station_name = first_non_empty(
@@ -1147,7 +1241,9 @@ def generate_station_relationship_answer(
     )
 
     if station_text:
-        answer_parts.append(station_text)
+        answer_parts.append(
+            station_text
+        )
 
     if expeditions:
 
@@ -1159,7 +1255,7 @@ def generate_station_relationship_answer(
 
             if not isinstance(
                 expedition,
-                dict
+                dict,
             ):
                 continue
 
@@ -1178,12 +1274,12 @@ def generate_station_relationship_answer(
 
             year = expedition_metadata.get(
                 "year",
-                ""
+                "",
             )
 
             region = expedition_metadata.get(
                 "region",
-                ""
+                "",
             )
 
             line = title
@@ -1200,7 +1296,9 @@ def generate_station_relationship_answer(
                 )
 
     return {
-        "answer": "\n\n".join(answer_parts),
+        "answer": "\n\n".join(
+            answer_parts
+        ),
         "related_results": expeditions,
     }
 
@@ -1215,10 +1313,12 @@ def make_citation(
 
     metadata = result.get(
         "metadata",
-        {}
+        {},
     )
 
-    source_type = get_source_type(result)
+    source_type = get_source_type(
+        result
+    )
 
     title = first_non_empty(
         metadata,
@@ -1273,7 +1373,7 @@ def make_citation(
             float(
                 result.get(
                     "score",
-                    0
+                    0,
                 )
             ),
             4,
@@ -1309,22 +1409,31 @@ def build_relationship_citations(
 
     for item in related_results:
 
-        if not isinstance(item, dict):
+        if not isinstance(
+            item,
+            dict,
+        ):
             continue
 
         if "metadata" in item:
 
-            normalized = normalize_result(item)
+            normalized = normalize_result(
+                item
+            )
 
         else:
 
             normalized = {
                 "score": 0,
                 "content": "",
-                "metadata": normalize_metadata(item),
+                "metadata": normalize_metadata(
+                    item
+                ),
             }
 
-        citation = make_citation(normalized)
+        citation = make_citation(
+            normalized
+        )
 
         key = (
             citation["source"],
@@ -1336,7 +1445,10 @@ def build_relationship_citations(
             continue
 
         seen.add(key)
-        citations.append(citation)
+
+        citations.append(
+            citation
+        )
 
     return citations
 
@@ -1365,7 +1477,7 @@ def generate_expedition_focused_answer(
 
         metadata = expedition.get(
             "metadata",
-            {}
+            {},
         )
 
         objectives = clean_text(
@@ -1379,7 +1491,9 @@ def generate_expedition_focused_answer(
                     expedition
                 ),
                 "citations": [
-                    make_citation(expedition)
+                    make_citation(
+                        expedition
+                    )
                 ],
             }
 
@@ -1388,7 +1502,9 @@ def generate_expedition_focused_answer(
             expedition
         ),
         "citations": [
-            make_citation(expedition)
+            make_citation(
+                expedition
+            )
         ],
     }
 
@@ -1402,7 +1518,9 @@ def generate_answer(
     results: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
 
-    results = normalize_results(results)
+    results = normalize_results(
+        results
+    )
 
     if not results:
 
@@ -1424,12 +1542,16 @@ def generate_answer(
     if expedition_answer is not None:
         return expedition_answer
 
-    primary = get_primary_entity(results)
+    primary = get_primary_entity(
+        results
+    )
 
     if primary is None:
         primary = results[0]
 
-    primary_source = get_source_type(primary)
+    primary_source = get_source_type(
+        primary
+    )
 
     if (
         primary_source == "stations"
@@ -1449,11 +1571,15 @@ def generate_answer(
             "answer": relationship["answer"],
             "citations": build_relationship_citations(
                 primary,
-                relationship["related_results"],
+                relationship[
+                    "related_results"
+                ],
             ),
         }
 
-    answer = format_primary_answer(primary)
+    answer = format_primary_answer(
+        primary
+    )
 
     if not answer:
 
@@ -1472,22 +1598,117 @@ def generate_answer(
 
 
 # ============================================================
-# OUTREACH CONTENT GENERATOR
+# OUTREACH PLATFORM NORMALIZATION
 # ============================================================
 
-def generate_outreach_content(
-    query: str,
-    audience: str,
-    platform: str,
-    result: Dict[str, Any],
+def normalize_platform(
+    platform: str
 ) -> str:
+
+    value = clean_text(
+        platform
+    ).lower()
+
+    value = re.sub(
+        r"[_\-]+",
+        " ",
+        value,
+    )
+
+    value = re.sub(
+        r"\s+",
+        " ",
+        value,
+    ).strip()
+
+    aliases = {
+
+        "website":
+            "website",
+
+        "website article":
+            "website",
+
+        "web article":
+            "website",
+
+        "instagram":
+            "instagram",
+
+        "instagram caption":
+            "instagram",
+
+        "instagram post":
+            "instagram",
+
+        "social media":
+            "social_media",
+
+        "social media post":
+            "social_media",
+
+        "linkedin":
+            "social_media",
+
+        "linkedin post":
+            "social_media",
+
+        "youtube":
+            "youtube",
+
+        "youtube description":
+            "youtube",
+
+        "youtube video":
+            "youtube",
+
+        "short video":
+            "short_video",
+
+        "short video script":
+            "short_video",
+
+        "video script":
+            "short_video",
+
+        "reel":
+            "short_video",
+
+        "reels":
+            "short_video",
+
+        "outreach":
+            "outreach",
+
+        "outreach article":
+            "outreach",
+
+        "public article":
+            "outreach",
+    }
+
+    return aliases.get(
+        value,
+        value,
+    )
+
+
+# ============================================================
+# OUTREACH FACT EXTRACTION
+# ============================================================
+
+def build_outreach_facts(
+    result: Dict[str, Any]
+) -> Dict[str, Any]:
 
     metadata = result.get(
         "metadata",
-        {}
+        {},
     )
 
-    source_type = get_source_type(result)
+    source_type = get_source_type(
+        result
+    )
 
     title = first_non_empty(
         metadata,
@@ -1501,6 +1722,12 @@ def generate_outreach_content(
 
     region = clean_text(
         metadata.get("region")
+    )
+
+    location = first_non_empty(
+        metadata,
+        "location",
+        "site",
     )
 
     description = first_non_empty(
@@ -1517,188 +1744,724 @@ def generate_outreach_content(
 
     research_areas = metadata.get(
         "research_areas",
-        []
+        [],
     )
 
     research_focus = metadata.get(
         "research_focus",
-        []
+        [],
     )
 
-    # --------------------------------------------------------
-    # VERIFIED FACTUAL CONTENT
-    # --------------------------------------------------------
+    institution = first_non_empty(
+        metadata,
+        "institution",
+        "organization",
+        "publisher",
+    )
 
-    if source_type == "expeditions":
+    document_type = first_non_empty(
+        metadata,
+        "document_type",
+        "type",
+        "category",
+    )
 
-        source_text = []
+    scientists = metadata.get(
+        "scientists",
+        [],
+    )
 
-        if title:
-            source_text.append(title)
+    institutions = metadata.get(
+        "institutions",
+        [],
+    )
 
-        if year:
-            source_text.append(f"({year})")
+    if not description:
 
-        if region:
-            source_text.append(
-                f"was conducted in the {region} region."
-            )
-
-        if objectives:
-            source_text.append(
-                f"Its objectives included {objectives}."
-            )
-
-        if research_areas:
-            source_text.append(
-                "The expedition covered "
-                + join_naturally(research_areas)
-                + "."
-            )
-
-        if description:
-            source_text.append(description)
-
-        factual_content = " ".join(source_text)
-
-    elif source_type == "stations":
-
-        source_text = []
-
-        if title:
-            source_text.append(
-                f"{title} is a polar research station."
-            )
-
-        if region:
-            source_text.append(
-                f"It is located in {region}."
-            )
-
-        if research_focus:
-            source_text.append(
-                "Its research focuses on "
-                + join_naturally(research_focus)
-                + "."
-            )
-
-        if description:
-            source_text.append(description)
-
-        factual_content = " ".join(source_text)
-
-    else:
-
-        factual_content = description
-
-    if not factual_content:
-
-        factual_content = result.get(
-            "content",
-            ""
+        description = clean_text(
+            result.get("content")
         )
 
-    factual_content = clean_text(
-        factual_content
-    )
+    if not description:
 
-    if not factual_content:
-
-        factual_content = (
-            "This resource is available in the "
+        description = (
+            "This resource is part of the "
             "POLAR Knowledge Repository."
         )
 
-    # --------------------------------------------------------
-    # AUDIENCE
-    # --------------------------------------------------------
+    if source_type == "expeditions":
 
-    audience_key = clean_text(
-        audience
-    ).lower()
+        if title and year:
 
-    if audience_key == "student":
+            subject_sentence = (
+                f"The {title} ({year})"
+            )
 
-        introduction = (
-            f"Learn about {title or 'this polar science resource'} "
-            "through this simple overview."
-        )
+        elif title:
 
-    elif audience_key == "researcher":
+            subject_sentence = (
+                f"The {title}"
+            )
 
-        introduction = (
-            f"Scientific overview of "
-            f"{title or 'the selected polar resource'}."
-        )
+        else:
 
-    elif audience_key == "educator":
+            subject_sentence = (
+                "The selected polar expedition"
+            )
 
-        introduction = (
-            f"An educational overview of "
-            f"{title or 'this polar science resource'}."
+    elif source_type == "stations":
+
+        subject_sentence = (
+            f"{title or 'The selected polar research station'}"
         )
 
     else:
 
-        introduction = (
-            f"Discover the science behind "
-            f"{title or 'this polar research resource'}."
+        subject_sentence = (
+            title
+            or "The selected polar science resource"
         )
 
-    # --------------------------------------------------------
-    # PLATFORM
-    # --------------------------------------------------------
+    return {
 
-    platform_key = clean_text(
+        "source_type":
+            source_type,
+
+        "title":
+            title,
+
+        "year":
+            year,
+
+        "region":
+            region,
+
+        "location":
+            location,
+
+        "description":
+            description,
+
+        "objectives":
+            objectives,
+
+        "research_areas":
+            research_areas,
+
+        "research_focus":
+            research_focus,
+
+        "institution":
+            institution,
+
+        "document_type":
+            document_type,
+
+        "scientists":
+            scientists,
+
+        "institutions":
+            institutions,
+
+        "subject_sentence":
+            subject_sentence,
+    }
+
+
+# ============================================================
+# OUTREACH CONTENT GENERATOR
+# ============================================================
+
+def generate_outreach_content(
+    query: str,
+    platform: str,
+    result: Dict[str, Any],
+) -> str:
+
+    platform_key = normalize_platform(
         platform
-    ).lower()
+    )
+
+    supported_platforms = {
+        "website",
+        "instagram",
+        "social_media",
+        "youtube",
+        "short_video",
+        "outreach",
+    }
+
+    if platform_key not in supported_platforms:
+
+        raise ValueError(
+            "Unsupported platform. Choose Website Article, "
+            "Instagram Caption, Social Media Post, "
+            "YouTube Description, Short Video Script, "
+            "or Outreach Article."
+        )
+
+    facts = build_outreach_facts(
+        result
+    )
+
+    title = facts["title"]
+    year = facts["year"]
+    region = facts["region"]
+    location = facts["location"]
+    description = facts["description"]
+    objectives = facts["objectives"]
+    research_areas = facts["research_areas"]
+    research_focus = facts["research_focus"]
+    institution = facts["institution"]
+
+    display_title = (
+        title
+        or "Polar Science"
+    )
+
+    # ========================================================
+    # 1. WEBSITE ARTICLE
+    # ========================================================
 
     if platform_key == "website":
 
-        return (
-            f"## {title or 'Polar Science Resource'}\n\n"
-            f"{introduction}\n\n"
-            f"{factual_content}\n\n"
-            "**Source:** POLAR Knowledge Repository"
+        sections = []
+
+        sections.append(
+            f"Title: {display_title}"
         )
+
+        sections.append(
+            "Introduction:\n\n"
+            f"{description}"
+        )
+
+        if year:
+            sections.append(
+                "Research Period:\n\n"
+                f"{year}"
+            )
+
+        if region or location:
+
+            location_parts = []
+
+            if region:
+                location_parts.append(
+                    region
+                )
+
+            if location:
+                location_parts.append(
+                    location
+                )
+
+            sections.append(
+                "Research Location:\n\n"
+                "The documented work is associated with "
+                + join_naturally(
+                    location_parts
+                )
+                + "."
+            )
+
+        if objectives:
+
+            sections.append(
+                "Research Objectives:\n\n"
+                + objectives
+            )
+
+        if research_areas:
+
+            sections.append(
+                "Research Areas:\n\n"
+                "The documented research includes "
+                + join_naturally(
+                    research_areas
+                )
+                + "."
+            )
+
+        if research_focus:
+
+            sections.append(
+                "Scientific Focus:\n\n"
+                "The recorded scientific focus includes "
+                + join_naturally(
+                    research_focus
+                )
+                + "."
+            )
+
+        if institution:
+
+            sections.append(
+                "Research Organisation:\n\n"
+                f"{institution}"
+            )
+
+        sections.append(
+            "Significance:\n\n"
+            "The information documented in the POLAR "
+            "Knowledge Repository provides a structured "
+            "record of this polar science activity."
+        )
+
+        sections.append(
+            "Conclusion:\n\n"
+            f"{display_title} represents documented "
+            "scientific work within the POLAR knowledge "
+            "repository."
+        )
+
+        sections.append(
+            "Source:\n\n"
+            "POLAR Knowledge Repository"
+        )
+
+        return clean_professional_content(
+            "\n\n".join(sections)
+        )
+
+    # ========================================================
+    # 2. INSTAGRAM CAPTION
+    # ========================================================
 
     if platform_key == "instagram":
 
-        hashtags = (
-            "#PolarScience "
-            "#Antarctica "
-            "#ArcticResearch "
-            "#NCPOR"
+        parts = []
+
+        parts.append(
+            display_title
         )
 
-        return (
-            f"🧊 **{title or 'Polar Science'}**\n\n"
-            f"{introduction}\n\n"
-            f"{factual_content}\n\n"
-            f"{hashtags}"
+        parts.append(
+            description
         )
 
-    if platform_key == "linkedin":
+        if objectives:
 
-        return (
-            f"### {title or 'Polar Research'}\n\n"
-            f"{introduction}\n\n"
-            f"{factual_content}\n\n"
-            "Polar research helps improve our understanding "
-            "of Earth's changing environments.\n\n"
-            "#PolarScience #PolarResearch #NCPOR"
+            parts.append(
+                "Research objective: "
+                + objectives
+            )
+
+        elif research_areas:
+
+            parts.append(
+                "Research areas: "
+                + join_naturally(
+                    research_areas
+                )
+                + "."
+            )
+
+        if region:
+
+            parts.append(
+                "Research region: "
+                + region
+                + "."
+            )
+
+        if location:
+
+            parts.append(
+                "Research location: "
+                + location
+                + "."
+            )
+
+        if research_focus:
+
+            parts.append(
+                "Scientific focus: "
+                + join_naturally(
+                    research_focus
+                )
+                + "."
+            )
+
+        parts.append(
+            "Further verified information is available "
+            "through the POLAR Science Portal."
         )
 
-    if platform_key in {"x", "twitter"}:
+        return clean_professional_content(
+            "\n\n".join(parts)
+        )
 
-        return (
-            f"🧊 {title or 'Polar Research'}\n\n"
-            f"{factual_content}\n\n"
-            "#PolarScience #PolarResearch #NCPOR"
+    # ========================================================
+    # 3. SOCIAL MEDIA POST
+    # ========================================================
+
+    if platform_key == "social_media":
+
+        sections = []
+
+        sections.append(
+            display_title
+        )
+
+        if year:
+
+            sections.append(
+                f"Research period: {year}."
+            )
+
+        sections.append(
+            "Research overview:\n\n"
+            + description
+        )
+
+        if objectives:
+
+            sections.append(
+                "Research objective:\n\n"
+                + objectives
+            )
+
+        if research_areas:
+
+            sections.append(
+                "Research areas:\n\n"
+                + join_naturally(
+                    research_areas
+                )
+                + "."
+            )
+
+        if research_focus:
+
+            sections.append(
+                "Scientific focus:\n\n"
+                + join_naturally(
+                    research_focus
+                )
+                + "."
+            )
+
+        if region:
+
+            sections.append(
+                "Region:\n\n"
+                + region
+            )
+
+        if location:
+
+            sections.append(
+                "Location:\n\n"
+                + location
+            )
+
+        sections.append(
+            "Source:\n\n"
+            "POLAR Knowledge Repository"
+        )
+
+        return clean_professional_content(
+            "\n\n".join(sections)
+        )
+
+    # ========================================================
+    # 4. YOUTUBE DESCRIPTION
+    # ========================================================
+
+    if platform_key == "youtube":
+
+        video_title = (
+            f"{display_title} | Polar Science"
+        )
+
+        sections = []
+
+        sections.append(
+            f"Title: {video_title}"
+        )
+
+        sections.append(
+            "Overview:\n\n"
+            f"This video presents documented information "
+            f"about {display_title}.\n\n"
+            f"{description}"
+        )
+
+        if year:
+
+            sections.append(
+                "Research Period:\n\n"
+                f"{year}"
+            )
+
+        if region or location:
+
+            locations = []
+
+            if region:
+                locations.append(
+                    region
+                )
+
+            if location:
+                locations.append(
+                    location
+                )
+
+            sections.append(
+                "Research Location:\n\n"
+                + join_naturally(
+                    locations
+                )
+                + "."
+            )
+
+        if objectives:
+
+            sections.append(
+                "Research Objective:\n\n"
+                + objectives
+            )
+
+        if research_areas:
+
+            sections.append(
+                "Research Areas:\n\n"
+                + join_naturally(
+                    research_areas
+                )
+                + "."
+            )
+
+        if research_focus:
+
+            sections.append(
+                "Scientific Focus:\n\n"
+                + join_naturally(
+                    research_focus
+                )
+                + "."
+            )
+
+        if institution:
+
+            sections.append(
+                "Research Organisation:\n\n"
+                + institution
+            )
+
+        sections.append(
+            "Sources:\n\n"
+            "POLAR Knowledge Repository"
+        )
+
+        return clean_professional_content(
+            "\n\n".join(sections)
+        )
+
+    # ========================================================
+    # 5. SHORT VIDEO SCRIPT
+    # ========================================================
+
+    if platform_key == "short_video":
+
+        scenes = []
+
+        scenes.append(
+            "Scene 1: Introduction\n\n"
+            "Visual: Opening view of the relevant polar "
+            "research environment or station.\n\n"
+            "Narration: "
+            f"{display_title} is a documented subject "
+            "of polar science research."
+        )
+
+        if region or location:
+
+            setting = []
+
+            if region:
+                setting.append(
+                    region
+                )
+
+            if location:
+                setting.append(
+                    location
+                )
+
+            scenes.append(
+                "Scene 2: Research Setting\n\n"
+                "Visual: Map or footage showing the "
+                "research location.\n\n"
+                "Narration: "
+                "The documented research is associated "
+                "with "
+                + join_naturally(setting)
+                + "."
+            )
+
+        scenes.append(
+            "Scene 3: Research Overview\n\n"
+            "Visual: Researchers, instruments, field "
+            "observations or relevant scientific data.\n\n"
+            "Narration: "
+            + description
+        )
+
+        if objectives:
+
+            scenes.append(
+                "Scene 4: Research Objectives\n\n"
+                "Visual: Scientific observations, "
+                "measurements or research activities.\n\n"
+                "Narration: "
+                + objectives
+            )
+
+        elif research_areas:
+
+            scenes.append(
+                "Scene 4: Research Areas\n\n"
+                "Visual: Relevant scientific fieldwork "
+                "and research activities.\n\n"
+                "Narration: The documented research "
+                "includes "
+                + join_naturally(
+                    research_areas
+                )
+                + "."
+            )
+
+        if research_focus:
+
+            scenes.append(
+                "Scene 5: Scientific Focus\n\n"
+                "Visual: Research data or scientific "
+                "observations.\n\n"
+                "Narration: The scientific focus includes "
+                + join_naturally(
+                    research_focus
+                )
+                + "."
+            )
+
+        else:
+
+            scenes.append(
+                "Scene 5: Research Significance\n\n"
+                "Visual: Polar environment and research "
+                "documentation.\n\n"
+                "Narration: This documented work forms "
+                "part of the scientific information "
+                "available through the POLAR Knowledge "
+                "Repository."
+            )
+
+        scenes.append(
+            "Scene 6: Closing\n\n"
+            "Visual: POLAR Science Portal interface.\n\n"
+            "Narration: Explore verified polar science "
+            "information through the POLAR Science Portal."
+        )
+
+        return clean_professional_content(
+            "\n\n".join(scenes)
+        )
+
+    # ========================================================
+    # 6. OUTREACH ARTICLE
+    # ========================================================
+
+    if platform_key == "outreach":
+
+        sections = []
+
+        sections.append(
+            f"Title: {display_title}"
+        )
+
+        sections.append(
+            "Overview:\n\n"
+            + description
+        )
+
+        if year:
+
+            sections.append(
+                "Research Period:\n\n"
+                + year
+            )
+
+        if region:
+
+            sections.append(
+                "Research Region:\n\n"
+                + region
+            )
+
+        if location:
+
+            sections.append(
+                "Research Location:\n\n"
+                + location
+            )
+
+        if objectives:
+
+            sections.append(
+                "Research Objectives:\n\n"
+                + objectives
+            )
+
+        if research_areas:
+
+            sections.append(
+                "Scientific Areas:\n\n"
+                "The documented work includes "
+                + join_naturally(
+                    research_areas
+                )
+                + "."
+            )
+
+        if research_focus:
+
+            sections.append(
+                "Scientific Focus:\n\n"
+                + join_naturally(
+                    research_focus
+                )
+                + "."
+            )
+
+        if institution:
+
+            sections.append(
+                "Research Organisation:\n\n"
+                + institution
+            )
+
+        sections.append(
+            "Importance:\n\n"
+            "The POLAR Knowledge Repository provides "
+            "structured access to verified information "
+            "about polar research, observations and "
+            "scientific activities."
+        )
+
+        sections.append(
+            "Source:\n\n"
+            "POLAR Knowledge Repository"
+        )
+
+        return clean_professional_content(
+            "\n\n".join(sections)
         )
 
     raise ValueError(
-        "Unsupported platform. Choose Website, Instagram, LinkedIn, or X."
+        "Unsupported platform."
     )
 
 
@@ -1712,8 +2475,7 @@ class AskRequest(BaseModel):
 
 class ContentGenerationRequest(BaseModel):
     query: str
-    audience: str = "public"
-    platform: str = "website"
+    platform: str = "Website Article"
 
 
 # ============================================================
@@ -1726,7 +2488,7 @@ def root():
     return {
         "name": "POLAR AI",
         "status": "running",
-        "version": "2.4.0",
+        "version": "4.0.0",
     }
 
 
@@ -1764,7 +2526,9 @@ def ask_polar_ai(
         # TEMPERATURE ML
         # ----------------------------------------------------
 
-        if is_temperature_prediction_query(query):
+        if is_temperature_prediction_query(
+            query
+        ):
 
             response = generate_temperature_answer(
                 query
@@ -1782,7 +2546,7 @@ def ask_polar_ai(
 
         results = search_knowledge(
             query,
-            top_k=10
+            top_k=10,
         )
 
         # ----------------------------------------------------
@@ -1847,13 +2611,9 @@ def generate_content(
         request.query
     )
 
-    audience = clean_text(
-        request.audience
-    )
-
     platform = clean_text(
         request.platform
-    )
+    ) or "Website Article"
 
     if not query:
 
@@ -1865,16 +2625,58 @@ def generate_content(
     try:
 
         # ----------------------------------------------------
-        # RETRIEVE VERIFIED POLAR KNOWLEDGE
+        # NORMALIZE PLATFORM
+        # ----------------------------------------------------
+
+        normalized_platform = normalize_platform(
+            platform
+        )
+
+        print(
+            "CONTENT REQUEST:",
+            {
+                "query": query,
+                "platform": platform,
+                "normalized_platform": normalized_platform,
+            },
+        )
+
+        # ----------------------------------------------------
+        # VALIDATE PLATFORM
+        # ----------------------------------------------------
+
+        supported_platforms = {
+            "website",
+            "instagram",
+            "social_media",
+            "youtube",
+            "short_video",
+            "outreach",
+        }
+
+        if normalized_platform not in supported_platforms:
+
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Unsupported platform. Choose Website Article, "
+                    "Instagram Caption, Social Media Post, "
+                    "YouTube Description, Short Video Script, "
+                    "or Outreach Article."
+                ),
+            )
+
+        # ----------------------------------------------------
+        # SEARCH POLAR KNOWLEDGE
         # ----------------------------------------------------
 
         results = search_knowledge(
             query,
-            top_k=10
+            top_k=10,
         )
 
         # ----------------------------------------------------
-        # SAME RELEVANCE GATE
+        # RELEVANCE GATE
         # ----------------------------------------------------
 
         if (
@@ -1884,7 +2686,6 @@ def generate_content(
 
             return {
                 "query": query,
-                "audience": audience,
                 "platform": platform,
                 "content": (
                     "I couldn't find anything related to your "
@@ -1894,7 +2695,7 @@ def generate_content(
             }
 
         # ----------------------------------------------------
-        # NORMALIZE
+        # NORMALIZE RESULTS
         # ----------------------------------------------------
 
         normalized_results = normalize_results(
@@ -1913,13 +2714,12 @@ def generate_content(
             primary = normalized_results[0]
 
         # ----------------------------------------------------
-        # GENERATE CONTENT
+        # GENERATE FORMAT-SPECIFIC CONTENT
         # ----------------------------------------------------
 
         content = generate_outreach_content(
             query=query,
-            audience=audience,
-            platform=platform,
+            platform=normalized_platform,
             result=primary,
         )
 
@@ -1929,13 +2729,17 @@ def generate_content(
 
         return {
             "query": query,
-            "audience": audience,
             "platform": platform,
             "content": content,
             "citations": [
-                make_citation(primary)
+                make_citation(
+                    primary
+                )
             ],
         }
+
+    except HTTPException:
+        raise
 
     except ValueError as exc:
 
